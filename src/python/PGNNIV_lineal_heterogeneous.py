@@ -357,7 +357,7 @@ if __name__ == "__main__":
     if args.resume_training and args.model_name:
 
         print("\n")
-        print('Se carga el modelo ' + '"' + str(args.model_name) + '"')
+        print('Loading model ' + '"' + str(args.model_name) + '"')
 
         model_pretrained_weights_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_first_train.weights.h5")
         model_pretrained_results_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_first_train.pkl")
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
     else:
         print("\n")
-        print("Se va a entrenar el modelo desde cero, para posteriormente guardar los pesos.")
+        print("Training of the model from scratch.")
         print("\n")
 
         model_weights_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_first_train.weights.h5")
@@ -418,7 +418,7 @@ if __name__ == "__main__":
                             #  batch_size=64,
                              )
         execution_time = time.time() - start_time
-        print(f"Tiempo de ejecución de train_neural_network: {execution_time} segundos")
+        print(f"Execution time of train_neural_network: {execution_time} seconds.")
         
         predictions_pred, predictions_exp = model.call(X_val)
 
