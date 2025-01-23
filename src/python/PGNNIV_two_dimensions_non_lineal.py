@@ -35,7 +35,7 @@ def check_and_create_directory(directory_path):
         print(f"The directory '{directory_path}' already exists.")
 
 
-MODEL_NAME = "tensorial_problem"
+MODEL_NAME = "nonlinear_problem_P3"
 data_filename = "../../data/" + MODEL_NAME + "_data.pkl"
 data_abs_path = os.path.abspath(data_filename)
 data = load_data_from_pickle(file_path=data_abs_path)
@@ -96,20 +96,12 @@ def e_constraint(y_true, y_pred):
 
 # Constraint pi1
 def pi1_constraint(X_true, f_true, y_pred, K):
-
-    Kxx = K[0, :, :]
-    Kxy = K[1, :, :]
-    Kyx = K[2, :, :]
-    Kyy = K[3, :, :]
-
+    K = K
     dydx_pred = Dx(y_pred)
     dydy_pred = Dy(y_pred)
-
-    qx_pred = tf.math.multiply(Kxx, (dydx_pred)) + tf.math.multiply(Kxy, (dydy_pred))
-    qy_pred = tf.math.multiply(Kyx, (dydx_pred)) + tf.math.multiply(Kyy, (dydy_pred))
-
-    return (-(Dx(qx_pred) + Dy(qy_pred)) - Mx(Mx(My(My(f_true)))))
-
+    qx_pred = tf.math.multiply(K, (dydx_pred))
+    qy_pred = tf.math.multiply(K, (dydy_pred))
+    return  (-(Dx(qx_pred) + Dy(qy_pred)) - Mx(Mx(My(My(f_true)))))
 
 # Constraint pi2
 def pi2_constraint(X_true, y_pred):
@@ -121,21 +113,14 @@ def pi2_constraint(X_true, y_pred):
 
 # Constraint pi3
 def pi3_constraint(X_true, y_pred, K):
-    
-    Kxx = K[0, :, :]
-    Kxy = K[1, :, :]
-    Kyx = K[2, :, :]
-    Kyy = K[3, :, :]
-
     dydx_pred = Dx(y_pred)
     dydy_pred = Dy(y_pred)
 
-    qx_pred = tf.math.multiply(Kxx, (dydx_pred)) + tf.math.multiply(Kxy, (dydy_pred))
-    qy_pred = tf.math.multiply(Kyx, (dydx_pred)) + tf.math.multiply(Kyy, (dydy_pred))
+    qx_pred = tf.math.multiply(K, (dydx_pred))
+    qy_pred = tf.math.multiply(K, (dydy_pred))
 
     X_true_red = My(X_true)
-    return tf.concat([
-                      tf.expand_dims(qx_pred[:, :, 0], axis=1) - tf.expand_dims(X_true_red[:, :, 4], axis=1),
+    return tf.concat([tf.expand_dims(qx_pred[:, :, 0], axis=1) - tf.expand_dims(X_true_red[:, :, 4], axis=1),
                       tf.expand_dims(qx_pred[:, :, -1], axis=1) - tf.expand_dims(X_true_red[:, :, 5], axis=1), 
                       tf.expand_dims(qy_pred[:, 0], axis=1) - tf.expand_dims(X_true_red[:, :, 6], axis=1),
                       tf.expand_dims(qy_pred[:, -1], axis=1) - tf.expand_dims(X_true_red[:, :, 7], axis=1),
@@ -145,38 +130,28 @@ def pi3_constraint(X_true, y_pred, K):
 @tf.keras.utils.register_keras_serializable()
 class NeuralNetwork(tf.keras.Model):
 
-    def __init__(self, input_size, hidden1_dim, hidden2_dim, output_predictive_size, output_explanatory_size, n_filters=15, **kwargs):
+    def __init__(self, input_size, hidden1_dim, hidden2_dim, output_size, n_filters=15, **kwargs):
         super(NeuralNetwork, self).__init__(**kwargs)
         
         self.input_size = input_size
         self.hidden1_dim = hidden1_dim
         self.hidden2_dim = hidden2_dim
-        self.output_predictive_size = output_predictive_size
-        self.output_explanatory_size = output_explanatory_size
+        self.output_size = output_size
         self.n_filters = n_filters
 
         # Predictive network
         self.flatten_layer_pred = tf.keras.layers.Flatten(name="flatten_layer_pred")
         self.hidden1_layer_pred = tf.keras.layers.Dense(hidden1_dim, activation='sigmoid', name="hidden1_layer_pred")
         self.hidden2_layer_pred = tf.keras.layers.Dense(hidden2_dim, activation='sigmoid', name="hidden2_layer_pred")
-        self.output_layer_pred = tf.keras.layers.Dense(output_predictive_size[0] * output_predictive_size[1], activation=None, name="output_layer_pred")
+        self.output_layer_pred = tf.keras.layers.Dense(output_size[0] * output_size[1], activation=None, name="output_layer_pred")
 
         # Explanatory network
-        self.weight_matrix_xx = self.add_weight(shape=(output_explanatory_size[1] - 1, output_explanatory_size[2] - 1),
-                                                initializer='random_normal',
-                                                trainable=True,
-                                                name='weight_matrix_xx')
-        
-        self.weight_matrix_xy = self.add_weight(shape=(output_explanatory_size[1] - 1, output_explanatory_size[2] - 1),
-                                                initializer='random_normal',
-                                                trainable=True,
-                                                name='weight_matrix_xy')
-
-        self.weight_matrix_yy = self.add_weight(shape=(output_explanatory_size[1] - 1, output_explanatory_size[2] - 1),
-                                                initializer='random_normal',
-                                                trainable=True,
-                                                name='weight_matrix_yy')
-
+        self.conv1_exp = tf.keras.layers.Conv2D(n_filters, (1, 1), activation='sigmoid', name="conv1_exp")
+        self.flatten_layer_exp = tf.keras.layers.Flatten(name="flatten_layer_exp")
+        self.hidden1_layer_exp = tf.keras.layers.Dense(hidden1_dim, activation='sigmoid', name="hidden1_layer_exp")
+        self.hidden2_layer_exp = tf.keras.layers.Dense(hidden2_dim, activation='sigmoid', name="hidden2_layer_exp")
+        self.output_layer_exp = tf.keras.layers.Dense(n_filters * (output_size[0] - 1) * (output_size[1] - 1), name="output_layer_exp")
+        self.conv2_exp = tf.keras.layers.Conv2D(1, (1, 1), activation=None, name="conv2_exp")
 
     def call(self, X):
         
@@ -187,20 +162,17 @@ class NeuralNetwork(tf.keras.Model):
         output_dense_pred = self.output_layer_pred(X_pred_hidden2)
 
         # Average operator along x and y directions
-        u_pred = tf.reshape(output_dense_pred, [tf.shape(output_dense_pred)[0], self.output_predictive_size[0], self.output_predictive_size[1]])
+        u_pred = tf.reshape(output_dense_pred, [tf.shape(output_dense_pred)[0], self.output_size[0], self.output_size[1]])
         um_pred = Mx(My(u_pred))
 
         # Explanatory network
-        K_pred_xx = tf.expand_dims(self.weight_matrix_xx, axis=0)
-        K_pred_xy = tf.expand_dims(self.weight_matrix_xy, axis=0)
-        K_pred_yx = tf.expand_dims(self.weight_matrix_xy, axis=0)
-        K_pred_yy = tf.expand_dims(self.weight_matrix_yy, axis=0)
-
-        # Concatenate matrices to have the tensor
-        K_pred = tf.concat([K_pred_xx, 
-                            K_pred_xy, 
-                            K_pred_yx, 
-                            K_pred_yy], axis=0)
+        conv_output_exp = self.conv1_exp(tf.expand_dims(um_pred, axis=-1))
+        conv_output_flat_exp = self.flatten_layer_exp(conv_output_exp)
+        X_exp_hidden1 = self.hidden1_layer_exp(conv_output_flat_exp)
+        X_exp_hidden2 = self.hidden2_layer_exp(X_exp_hidden1)
+        output_exp = self.output_layer_exp(X_exp_hidden2)
+        output_exp_reshaped = tf.reshape(output_exp, (um_pred.shape[0], um_pred.shape[1], um_pred.shape[2], self.n_filters))
+        K_pred = tf.squeeze(self.conv2_exp(output_exp_reshaped), axis=-1)
 
         return u_pred, K_pred
     
@@ -268,7 +240,6 @@ def train_neural_network(model, optimizer, X_train, y_train, f_train, num_epochs
                     # Forward pass
                     predictive_output, explanatory_output = model.call(X_batch)
                     predictions = predictive_output
-
                     K = explanatory_output
 
                     # Loss term computing
@@ -343,7 +314,7 @@ if __name__ == "__main__":
     parser.add_argument('resume_training', type=int, choices=[0, 1], help='Boolean to resume training (0 or 1)')
 
     args = parser.parse_args()
-    args.model_name = "tensorial_problem" #ESTO ESTA PUESTO PROVISIONALMENTE PARA QUE NO DE PROBLEMAS. LA IDEA DE ESTO ES PASARLO COMO ARGUMENTO DEL PROGRAMA
+    args.model_name = "nonlinear_problem_P3" #ESTO ESTA PUESTO PROVISIONALMENTE PARA QUE NO DE PROBLEMAS. LA IDEA DE ESTO ES PASARLO COMO ARGUMENTO DEL PROGRAMA
 
     print("\n")
     print("Python script configuration:")
@@ -371,7 +342,6 @@ if __name__ == "__main__":
     y_val = data['y_val']
     f_train = data['f_train']
     f_val = data['f_val']
-    k_train = data['k_train']
 
     n_data = data['n_data']
     n_discretization = data['n_discretization']
@@ -387,10 +357,9 @@ if __name__ == "__main__":
 
     # Load model
     input_shape = X_train[0].shape
-    hidden1_dim = 100
-    hidden2_dim = 100
-    output_predictive_shape = y_train[0].shape
-    output_explanatory_shape = k_train[0].shape
+    hidden1_dim = 150
+    hidden2_dim = 150
+    output_shape = y_train[0].shape
 
     print("\n")
     print("Neural network shape")
@@ -398,13 +367,10 @@ if __name__ == "__main__":
     print("Neurons in the input layer:", input_shape)
     print("Neurons in the 1st hidden layer:", hidden1_dim)
     print("Neurons in the 2nd hidden layer:", hidden2_dim)
-    print("Neurons in the output layer (predictive):", output_predictive_shape)
-    print("Neurons in the output layer (explanatory):", output_explanatory_shape)
+    print("Neurons in the output layer:", output_shape)
     print("\n")
 
     if args.resume_training and args.model_name:
-
-        print("In construction")
 
         print("\n")
         print('Loading model ' + '"' + str(args.model_name) + '"')
@@ -416,7 +382,7 @@ if __name__ == "__main__":
         model_new_results_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_new_train.pkl")
 
         # Create model, call it to initialize and load weights
-        model_loaded = NeuralNetwork(input_shape, hidden1_dim, hidden2_dim, output_predictive_shape, output_explanatory_shape)
+        model_loaded = NeuralNetwork(input_shape, hidden1_dim, hidden2_dim, output_shape)
         _ = model_loaded.call(X_train)
         model_loaded.load_weights(model_pretrained_weights_path)   
 
@@ -426,7 +392,7 @@ if __name__ == "__main__":
 
         start_time = time.time()
         training = train_neural_network(model=model_loaded,
-                             optimizer = tf.optimizers.Adam(learning_rate=3e-5),
+                             optimizer = tf.optimizers.Adam(learning_rate=1e-4),
                              X_train=X_train,
                              y_train=y_train,
                              f_train=f_train,
@@ -457,7 +423,7 @@ if __name__ == "__main__":
         model_weights_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_first_train.weights.h5")
         model_results_path = os.path.abspath(results_folder_path + "/" + args.model_name + "_first_train.pkl")
 
-        model = NeuralNetwork(input_shape, hidden1_dim, hidden2_dim, output_predictive_shape, output_explanatory_shape)
+        model = NeuralNetwork(input_shape, hidden1_dim, hidden2_dim, output_shape)
         optimizer = tf.optimizers.Adam(learning_rate=3e-4)
 
         start_time = time.time()
@@ -484,3 +450,15 @@ if __name__ == "__main__":
             pickle.dump(data, f)
 
         model.save_weights(model_weights_path)
+
+        
+        
+
+
+
+
+
+
+
+
+
