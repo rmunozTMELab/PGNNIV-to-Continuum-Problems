@@ -35,7 +35,7 @@ def check_and_create_directory(directory_path):
         print(f"The directory '{directory_path}' already exists.")
 
 
-MODEL_NAME = "_heterogeneous"
+MODEL_NAME = "heterogeneous_problem"
 data_filename = "../../data/" + MODEL_NAME + "_data.pkl"
 data_abs_path = os.path.abspath(data_filename)
 data = load_data_from_pickle(file_path=data_abs_path)
