@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
         start_time = time.time()
         training = train_neural_network(model=model_loaded,
-                             optimizer = tf.optimizers.Adam(learning_rate=1e-4),
+                             optimizer = tf.optimizers.Adam(learning_rate=3e-5),
                              X_train=X_train,
                              y_train=y_train,
                              f_train=f_train,
