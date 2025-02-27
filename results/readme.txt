@@ -1,1 +1,0 @@
-Folder in which results will be saved.
